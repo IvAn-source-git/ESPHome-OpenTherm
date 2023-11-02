@@ -1,15 +1,13 @@
-substitutions:
-  devicename: opentherm
-  upper_devicename: Opentherm
-
 esphome:
   name: opentherm
   comment: "Управление отоплением Bosch Gaz 6000 WBN 24H на основе OpenTherm"
-  platform: ESP8266
-  board: d1_mini
   includes:
     - esphome-opentherm/
 
+esp8266:
+  board: d1_mini
+  restore_from_flash: TRUE
+  
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -36,7 +34,7 @@ output:
   - platform: custom
     type: float
     lambda: |-
-      OpenthermComponent *openthermComp = (OpenthermComponent*) opentherm;
+      OpenthermComponent *openthermComp = (OpenthermComponent*) id(opentherm);
       auto opentherm_pid_output = new OpenthermFloatOutput();
       openthermComp->set_pid_output(opentherm_pid_output);
       App.register_component(opentherm_pid_output);     
@@ -56,7 +54,7 @@ sensor:
 
   - platform: custom
     lambda: |-    
-      OpenthermComponent *openthermComp = (OpenthermComponent*) opentherm;
+      OpenthermComponent *openthermComp = (OpenthermComponent*) id(opentherm);
       return { 
         openthermComp->boiler_temperature, 
         openthermComp->modulation_sensor,
@@ -69,6 +67,7 @@ sensor:
       accuracy_decimals: 1
       icon: "mdi:water-boiler"
     - name: "Boiler Modulation"
+      id: boiler_modulation
       unit_of_measurement: "%"
       accuracy_decimals: 0
       icon: "mdi:chart-bell-curve-cumulative"
@@ -84,6 +83,12 @@ sensor:
     name: "Actual temperature"
     unit_of_measurement: °C
     device_class: temperature
+  - platform: template
+    id: temperature_sensor_interval
+    name: "Actual temperature interval"
+    lambda: |-
+      return id(temperature_sensor).state;
+    update_interval: 1s
   - platform: pid
     name: "PID Climate Result"
     type: RESULT    
@@ -96,11 +101,19 @@ sensor:
     name: "PID Climate ERROR"
     type: ERROR    
     icon: "mdi:vector-curve"
-
+  - platform: copy 
+    source_id: boiler_modulation
+    name: "Boiler power"
+    filters:
+      - lambda: return (x * 0.24);
+    unit_of_measurement: "kW"
+    device_class: "power"
+    id: boiler_power
+    
 binary_sensor:
   - platform: custom
     lambda: |-
-      OpenthermComponent *openthermComp = (OpenthermComponent*) opentherm;
+      OpenthermComponent *openthermComp = (OpenthermComponent*) id(opentherm);
       return {openthermComp->flame};
     binary_sensors:
     - name: "Flame"
@@ -109,7 +122,7 @@ binary_sensor:
 switch:
   - platform: custom
     lambda: |-
-      OpenthermComponent *openthermComp = (OpenthermComponent*) opentherm;
+      OpenthermComponent *openthermComp = (OpenthermComponent*) id(opentherm);
       return {openthermComp->thermostatSwitch};
     switches:
       name: "Disable PID"
@@ -121,7 +134,7 @@ switch:
 climate:
   - platform: custom
     lambda: |-
-      OpenthermComponent *openthermComp = (OpenthermComponent*) opentherm;
+      OpenthermComponent *openthermComp = (OpenthermComponent*) id(opentherm);
       return {
         openthermComp->hotWaterClimate, 
         openthermComp->heatingWaterClimate
@@ -138,10 +151,10 @@ climate:
     id: pid_climate
     name: "PID Climate Controller"
     visual:
-      min_temperature: 10 °C
-      max_temperature: 28 °C
+      min_temperature: 5 °C
+      max_temperature: 30 °C
       temperature_step: 0.5 °C
-    sensor: temperature_sensor
+    sensor: temperature_sensor_interval
     default_target_temperature: 23°C
     heat_output: pid_output
     control_parameters:
